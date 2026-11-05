@@ -4,13 +4,13 @@ import (
 	"context"
 	"crypto/subtle"
 	"html/template"
+	"montage-ledger/internal/auth"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"montage-ledger/internal/auth"
 )
 
 type web struct {
