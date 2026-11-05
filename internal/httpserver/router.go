@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"montage-ledger/internal/auth"
 )
 
 type DatabasePinger interface{ Ping(context.Context) error }
@@ -40,6 +43,15 @@ func NewHandler(db DatabasePinger) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write([]byte(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Монтажные ведомости</title><body><h1>Монтажные ведомости ОВиК</h1><p>Базовый сервер. Каталоги и редактор ведомостей пока не реализованы.</p></body></html>`))
 	})
+	if pool, ok := db.(*pgxpool.Pool); ok && pool != nil {
+		x := web{db: pool, auth: auth.Store{DB: pool}}
+		mux.HandleFunc("GET /login", x.loginGet)
+		mux.HandleFunc("POST /login", x.loginPost)
+		mux.HandleFunc("POST /logout", x.requireUser(x.logout))
+		mux.HandleFunc("GET /app", x.requireUser(x.home))
+		mux.HandleFunc("GET /app/customers", x.requireUser(x.customersGet))
+		mux.HandleFunc("POST /app/customers", x.requireUser(x.customersPost))
+	}
 	return mux
 }
 
