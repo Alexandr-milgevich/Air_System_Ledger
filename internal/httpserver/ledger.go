@@ -323,6 +323,10 @@ func (x web) itemSave(w http.ResponseWriter, r *http.Request, u auth.Identity, u
 		return
 	}
 	defer tx.Rollback(ctx)
+	if _, auditErr := tx.Exec(ctx, `SELECT set_config('app.actor_id',$1,true)`, u.ID); auditErr != nil {
+		http.Error(w, "Ошибка контекста аудита", 500)
+		return
+	}
 	// Serialize edits and approval against the parent revision; SQL trigger also protects approved rows.
 	var status string
 	e = tx.QueryRow(ctx, `SELECT status FROM project_revisions WHERE id=$1 FOR UPDATE`, id).Scan(&status)
@@ -458,6 +462,10 @@ func (x web) itemDelete(w http.ResponseWriter, r *http.Request, u auth.Identity)
 		return
 	}
 	defer tx.Rollback(ctx)
+	if _, auditErr := tx.Exec(ctx, `SELECT set_config('app.actor_id',$1,true)`, u.ID); auditErr != nil {
+		http.Error(w, "Ошибка контекста аудита", 500)
+		return
+	}
 	var status string
 	e = tx.QueryRow(ctx, `SELECT status FROM project_revisions WHERE id=$1 FOR UPDATE`, id).Scan(&status)
 	if e != nil || status != "draft" {

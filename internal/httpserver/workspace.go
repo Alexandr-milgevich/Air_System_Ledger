@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"montage-ledger/internal/auth"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"montage-ledger/internal/auth"
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -24,9 +24,9 @@ type revisionRow struct {
 }
 type workspaceData struct {
 	Title, Error, CSRF, View, ProjectID, ProjectName, CustomerName, RevisionID, RevisionStatus, Search string
-	Admin, CanWrite                                                                                    bool
+	Admin, CanWrite, CanClone                                                                          bool
 	Customers, Projects, Workers, ProjectWorkers, Members, Systems, Locations                          []namedRow
-	Revisions                                                                                          []revisionRow
+	Revisions, CompareRevisions                                                                        []revisionRow
 }
 
 const workspaceHTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — Монтажные ведомости</title><style>
@@ -39,8 +39,9 @@ body{font:16px/1.5 system-ui,sans-serif;background:#f4f6fa;color:#182236;margin:
 <div class="grid"><div class="panel"><h2>Участники объекта</h2>{{range .Members}}<p>{{.Name}} — {{.Detail}}</p>{{else}}<p>Нет назначений</p>{{end}}{{if .Admin}}<form method="post" action="/app/projects/{{.ProjectID}}/members"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Логин пользователя</label><input name="login" required maxlength="120"><label>Уровень доступа</label><select name="permission"><option value="read">Просмотр</option><option value="write">Редактирование</option><option value="approve">Согласование</option><option value="admin">Администратор объекта</option></select><button>Добавить / изменить доступ</button></form>{{end}}</div>
 <div class="panel"><h2>Монтажники объекта</h2>{{range .ProjectWorkers}}<p>{{.Name}}</p>{{else}}<p>Монтажники не закреплены</p>{{end}}{{if .CanWrite}}<form method="post" action="/app/projects/{{.ProjectID}}/workers"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Монтажник</label><select name="worker_id" required><option value="">Выберите работника</option>{{range .Workers}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select><button>Закрепить за объектом</button></form>{{end}}</div></div>
 {{else if eq .View "revision"}}
+<p><a href="/app/revisions/{{.RevisionID}}/review"><strong>Согласование ведомости</strong></a></p>
 <p><a href="/app/revisions/{{.RevisionID}}/ledger">Открыть редактор монтажной ведомости →</a> · <a href="/app/revisions/{{.RevisionID}}/execution">Факт и начисления</a> · <a href="/app/revisions/{{.RevisionID}}/reports">Сводный отчёт</a></p>
-<p class="muted">Объект: <a href="/app/projects/{{.ProjectID}}">{{.ProjectName}}</a> · Статус: {{.RevisionStatus}}</p><div class="grid"><div class="panel"><h2>Инженерные системы</h2><table><tr><th>Код</th><th>Название</th></tr>{{range .Systems}}<tr><td>{{.Name}}</td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Систем пока нет</td></tr>{{end}}</table>{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/systems" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Код (например, П-31)</label><input name="code" maxlength="50" required><label>Название</label><input name="name" maxlength="250" required><label>Тип системы</label><select name="type_code"><option value="supply">Приточная</option><option value="exhaust">Вытяжная</option><option value="supply_exhaust">Приточно-вытяжная</option><option value="conditioning">Кондиционирование</option><option value="cooling">Холодоснабжение</option><option value="drainage">Дренаж</option></select><button>Добавить систему</button></form>{{end}}</div><div class="panel"><h2>Места монтажа</h2>{{range .Locations}}<p>{{.Name}}</p>{{else}}<p>Помещения пока не внесены</p>{{end}}{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/locations" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Помещение / зона</label><input name="name" maxlength="250" required><button>Добавить место монтажа</button></form>{{end}}</div></div>
+<p class="muted">Объект: <a href="/app/projects/{{.ProjectID}}">{{.ProjectName}}</a> · Статус: {{.RevisionStatus}}</p><div class="panel"><h2>История ревизий</h2><p><a href="/app/revisions/{{.RevisionID}}/history">Журнал изменений отдельных строк</a></p>{{if .CanClone}}<form method="post" action="/app/revisions/{{.RevisionID}}/clone"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Создать новую ревизию копированием этой</button></form>{{end}}<p>Сравнить текущую версию с:</p>{{range .CompareRevisions}}<p><a href="/app/revisions/{{$.RevisionID}}/compare?against={{.ID}}">Ревизия №{{.Number}} ({{.Status}})</a></p>{{else}}<p class="muted">Пока нет другой ревизии</p>{{end}}</div><div class="grid"><div class="panel"><h2>Инженерные системы</h2><table><tr><th>Код</th><th>Название</th></tr>{{range .Systems}}<tr><td>{{.Name}}</td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Систем пока нет</td></tr>{{end}}</table>{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/systems" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Код (например, П-31)</label><input name="code" maxlength="50" required><label>Название</label><input name="name" maxlength="250" required><label>Тип системы</label><select name="type_code"><option value="supply">Приточная</option><option value="exhaust">Вытяжная</option><option value="supply_exhaust">Приточно-вытяжная</option><option value="conditioning">Кондиционирование</option><option value="cooling">Холодоснабжение</option><option value="drainage">Дренаж</option></select><button>Добавить систему</button></form>{{end}}</div><div class="panel"><h2>Места монтажа</h2>{{range .Locations}}<p>{{.Name}}</p>{{else}}<p>Помещения пока не внесены</p>{{end}}{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/locations" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Помещение / зона</label><input name="name" maxlength="250" required><button>Добавить место монтажа</button></form>{{end}}</div></div>
 {{else if eq .View "workers"}}
 <div class="panel"><h2>Справочник монтажников</h2>{{range .Workers}}<p>{{.Name}}</p>{{else}}<p>Работников пока нет</p>{{end}}</div>{{if .Admin}}<div class="panel"><h2>Новый монтажник</h2><form method="post" action="/app/workers"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>ФИО или отображаемое имя</label><input name="name" maxlength="250" required><button>Добавить работника</button></form></div>{{end}}
 {{end}}</main></body></html>`
@@ -355,7 +356,7 @@ func (x web) revisionGet(w http.ResponseWriter, r *http.Request, u auth.Identity
 		http.Error(w, "Доступ запрещён", 403)
 		return
 	}
-	data := workspaceData{Title: "Ревизия монтажной ведомости", View: "revision", ProjectID: projectID, ProjectName: projectName, RevisionID: id, RevisionStatus: status, CanWrite: canEdit(permission) && status == "draft", CSRF: x.csrf(r, u)}
+	data := workspaceData{Title: "Ревизия монтажной ведомости", View: "revision", ProjectID: projectID, ProjectName: projectName, RevisionID: id, RevisionStatus: status, CanWrite: canEdit(permission) && status == "draft", CanClone: canEdit(permission), CSRF: x.csrf(r, u)}
 	rows, e := x.db.Query(ctx, `SELECT id,code,name FROM project_systems WHERE revision_id=$1 ORDER BY sort_order,code`, id)
 	if e != nil {
 		http.Error(w, "Ошибка систем", 500)
@@ -394,6 +395,26 @@ func (x web) revisionGet(w http.ResponseWriter, r *http.Request, u auth.Identity
 	rows.Close()
 	if e != nil {
 		http.Error(w, "Ошибка чтения мест", 500)
+		return
+	}
+	rs, e := x.db.Query(ctx, `SELECT id::text,number,status FROM project_revisions WHERE project_id=$1 AND id<>$2 ORDER BY number DESC`, projectID, id)
+	if e != nil {
+		http.Error(w, "Ошибка списка ревизий", 500)
+		return
+	}
+	for rs.Next() {
+		var v revisionRow
+		if e = rs.Scan(&v.ID, &v.Number, &v.Status); e != nil {
+			break
+		}
+		data.CompareRevisions = append(data.CompareRevisions, v)
+	}
+	if e == nil {
+		e = rs.Err()
+	}
+	rs.Close()
+	if e != nil {
+		http.Error(w, "Ошибка списка ревизий", 500)
 		return
 	}
 	workspaceRender(w, 200, data)

@@ -127,6 +127,10 @@ func (x web) bulkUndo(w http.ResponseWriter, r *http.Request, u auth.Identity) {
 		return
 	}
 	defer tx.Rollback(ctx)
+	if _, auditErr := tx.Exec(ctx, `SELECT set_config('app.actor_id',$1,true)`, u.ID); auditErr != nil {
+		http.Error(w, "Ошибка контекста аудита", 500)
+		return
+	}
 	var status string
 	err = tx.QueryRow(ctx, `SELECT status FROM project_revisions WHERE id=$1 FOR UPDATE`, revision).Scan(&status)
 	if err != nil || status != "draft" {
