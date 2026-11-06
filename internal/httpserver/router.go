@@ -21,6 +21,7 @@ type statusResponse struct {
 // A nil pinger is treated as unavailable, never as healthy.
 func NewHandler(db DatabasePinger) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /assets/app.css", appCSSHandler)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, http.StatusOK, statusResponse{Status: "alive", Service: "montage-ledger"})
 	})

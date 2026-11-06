@@ -23,16 +23,16 @@ type revisionRow struct {
 	Status string
 }
 type workspaceData struct {
-	Title, Error, CSRF, View, ProjectID, ProjectName, CustomerName, RevisionID, RevisionStatus string
-	Admin, CanWrite                                                                            bool
-	Customers, Projects, Workers, ProjectWorkers, Members, Systems, Locations                  []namedRow
-	Revisions                                                                                  []revisionRow
+	Title, Error, CSRF, View, ProjectID, ProjectName, CustomerName, RevisionID, RevisionStatus, Search string
+	Admin, CanWrite                                                                                    bool
+	Customers, Projects, Workers, ProjectWorkers, Members, Systems, Locations                          []namedRow
+	Revisions                                                                                          []revisionRow
 }
 
 const workspaceHTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — Монтажные ведомости</title><style>
-body{font:16px/1.5 system-ui,sans-serif;background:#f4f6fa;color:#182236;margin:0}header{background:#182743;color:#fff;padding:18px 5%}header a{color:#fff;margin-right:16px}main{max-width:1080px;margin:28px auto;padding:0 18px}.panel{background:white;padding:24px;border-radius:12px;border:1px solid #dce3eb;margin-bottom:18px}h1{margin:0 0 20px}h2{margin:0 0 12px;font-size:21px}a{color:#245ab0}label{display:block;margin:10px 0 4px;font-weight:600}input,select{box-sizing:border-box;padding:10px;width:100%;max-width:520px;border:1px solid #bcc8d7;border-radius:6px}button{display:block;background:#245ab0;color:white;border:0;padding:11px 19px;margin-top:14px;border-radius:6px;cursor:pointer}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #e3e8f0;text-align:left}.error{color:#a22323}.muted{color:#687488}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.grid .panel{margin-bottom:0}small{color:#69748a}</style></head><body><header><b>Монтажные ведомости ОВиК</b><nav><a href="/app">Главная</a><a href="/app/customers">Заказчики</a><a href="/app/projects">Объекты</a><a href="/app/workers">Работники</a></nav></header><main><h1>{{.Title}}</h1>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+body{font:16px/1.5 system-ui,sans-serif;background:#f4f6fa;color:#182236;margin:0}header{background:#182743;color:#fff;padding:18px 5%}header a{color:#fff;margin-right:16px}main{max-width:1080px;margin:28px auto;padding:0 18px}.panel{background:white;padding:24px;border-radius:12px;border:1px solid #dce3eb;margin-bottom:18px}h1{margin:0 0 20px}h2{margin:0 0 12px;font-size:21px}a{color:#245ab0}label{display:block;margin:10px 0 4px;font-weight:600}input,select{box-sizing:border-box;padding:10px;width:100%;max-width:520px;border:1px solid #bcc8d7;border-radius:6px}button{display:block;background:#245ab0;color:white;border:0;padding:11px 19px;margin-top:14px;border-radius:6px;cursor:pointer}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #e3e8f0;text-align:left}.error{color:#a22323}.muted{color:#687488}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.grid .panel{margin-bottom:0}small{color:#69748a}</style><link rel="stylesheet" href="/assets/app.css"></head><body><header><b>Монтажные ведомости ОВиК</b><nav><a href="/app">Главная</a><a href="/app/customers">Заказчики</a><a href="/app/projects">Объекты</a><a href="/app/workers">Работники</a></nav></header><main><h1>{{.Title}}</h1>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 {{if eq .View "projects"}}
-<div class="panel"><h2>Объекты</h2><table><tr><th>Объект</th><th>Заказчик</th></tr>{{range .Projects}}<tr><td><a href="/app/projects/{{.ID}}">{{.Name}}</a></td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Объектов пока нет</td></tr>{{end}}</table></div>
+<div class="panel"><h2>Объекты</h2><form method="get" action="/app/projects" class="search-form" role="search"><label for="project-search">Поиск объекта или заказчика</label><div class="search-controls"><input id="project-search" type="search" name="q" value="{{.Search}}" placeholder="Название объекта или заказчика" maxlength="120"><button type="submit">Найти</button><a href="/app/projects">Сбросить</a></div></form><div class="table-scroll"><table><tr><th>Объект</th><th>Заказчик</th></tr>{{range .Projects}}<tr><td><a href="/app/projects/{{.ID}}">{{.Name}}</a></td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Объекты не найдены</td></tr>{{end}}</table></div></div>
 {{if .Admin}}<div class="panel"><h2>Новый объект</h2><form method="post" action="/app/projects"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Заказчик</label><select name="customer_id" required><option value="">Выберите заказчика</option>{{range .Customers}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select><label>Название объекта</label><input name="name" maxlength="250" required><label>Адрес</label><input name="address" maxlength="500"><button>Создать объект</button></form></div>{{end}}
 {{else if eq .View "project"}}
 <p class="muted">Заказчик: {{.CustomerName}}</p><div class="panel"><h2>Ревизии монтажных ведомостей</h2><table><tr><th>Номер</th><th>Статус</th></tr>{{range .Revisions}}<tr><td><a href="/app/revisions/{{.ID}}">Ревизия №{{.Number}}</a></td><td>{{.Status}}</td></tr>{{else}}<tr><td colspan="2">Ревизий нет</td></tr>{{end}}</table>{{if .CanWrite}}<form method="post" action="/app/projects/{{.ProjectID}}/revisions"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Создать новую пустую ревизию</button></form>{{end}}</div>
@@ -51,7 +51,7 @@ func workspaceRender(w http.ResponseWriter, status int, data workspaceData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self' 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 	w.WriteHeader(status)
 	_ = workspaceTemplate.Execute(w, data)
 }
@@ -87,7 +87,12 @@ func (x web) projectsGet(w http.ResponseWriter, r *http.Request, u auth.Identity
 	ctx, cancel := shortContext(r)
 	defer cancel()
 	data := workspaceData{Title: "Объекты", View: "projects", Admin: auth.HasRole(u, "admin"), CSRF: x.csrf(r, u)}
-	rows, e := x.db.Query(ctx, `SELECT p.id,p.name,c.name FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.archived_at IS NULL AND ($2::boolean OR EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id=p.id AND pm.user_id=$1)) ORDER BY p.name LIMIT 250`, u.ID, data.Admin)
+	data.Search = strings.TrimSpace(r.URL.Query().Get("q"))
+	if len([]rune(data.Search)) > 120 {
+		http.Error(w, "Слишком длинный поисковый запрос", http.StatusBadRequest)
+		return
+	}
+	rows, e := x.db.Query(ctx, `SELECT p.id,p.name,c.name FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.archived_at IS NULL AND ($2::boolean OR EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id=p.id AND pm.user_id=$1)) AND ($3::text = '' OR p.name ILIKE '%' || $3 || '%' OR c.name ILIKE '%' || $3 || '%') ORDER BY p.name LIMIT 250`, u.ID, data.Admin, data.Search)
 	if e != nil {
 		http.Error(w, "Не удалось загрузить объекты", 500)
 		return
