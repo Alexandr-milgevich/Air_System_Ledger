@@ -68,6 +68,11 @@ func NewHandler(db DatabasePinger) http.Handler {
 		mux.HandleFunc("POST /app/revisions/{id}/xlsx/preview", x.requireUser(x.xlsxPreview))
 		mux.HandleFunc("POST /app/revisions/{id}/xlsx/commit", x.requireUser(x.xlsxCommit))
 		mux.HandleFunc("GET /app/revisions/{id}/xlsx/export", x.requireUser(x.xlsxExport))
+		mux.HandleFunc("GET /app/revisions/{id}/execution", x.requireUser(x.executionGet))
+		mux.HandleFunc("POST /app/revisions/{id}/execution/assign", x.requireUser(x.executionAssign))
+		mux.HandleFunc("POST /app/revisions/{id}/execution/{event}/approve", x.requireUser(x.executionApprove))
+		mux.HandleFunc("POST /app/revisions/{id}/execution/{assignment}/record", x.requireUser(x.executionRecord))
+		mux.HandleFunc("GET /app/revisions/{id}/execution/export", x.requireUser(x.executionExport))
 		mux.HandleFunc("GET /app/workers", x.requireUser(x.workersGet))
 		mux.HandleFunc("POST /app/workers", x.requireUser(x.workersPost))
 	}

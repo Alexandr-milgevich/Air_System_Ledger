@@ -1,0 +1,12 @@
+DROP TRIGGER IF EXISTS stage9_event_insert ON work_execution_events;
+DROP FUNCTION IF EXISTS stage9_event_guard();
+DROP TRIGGER IF EXISTS stage9_approval_append_only ON work_execution_approvals;
+DROP FUNCTION IF EXISTS stage9_approval_immutable();
+DROP TRIGGER IF EXISTS stage9_rate_write ON worker_rate_snapshots;
+DROP FUNCTION IF EXISTS stage9_rate_guard();
+DROP TABLE IF EXISTS work_execution_approvals;
+DROP INDEX IF EXISTS idx_execution_event_date;
+DROP TRIGGER IF EXISTS stage9_assignment_immutable ON work_assignments;
+DROP FUNCTION IF EXISTS stage9_assignment_fact_guard();
+DROP TRIGGER IF EXISTS stage9_item_fact_write ON project_work_items;
+DROP FUNCTION IF EXISTS stage9_item_fact_guard();
