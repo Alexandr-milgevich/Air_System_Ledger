@@ -1,0 +1,10 @@
+DROP TRIGGER IF EXISTS stage132_item_allocation_guard ON project_work_items;
+DROP FUNCTION IF EXISTS stage132_item_allocation_guard();
+DROP TRIGGER IF EXISTS stage132_allocation_events_guard ON work_assignment_allocation_events;
+DROP FUNCTION IF EXISTS stage132_allocation_events_immutable();
+DROP TRIGGER IF EXISTS stage132_allocation_changed ON work_assignment_allocations;
+DROP FUNCTION IF EXISTS stage132_allocation_audit();
+DROP TRIGGER IF EXISTS stage132_allocation_guard ON work_assignment_allocations;
+DROP FUNCTION IF EXISTS stage132_validate_allocation();
+DROP TABLE IF EXISTS work_assignment_allocation_events;
+DROP TABLE IF EXISTS work_assignment_allocations;
