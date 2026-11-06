@@ -3,11 +3,11 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"montage-ledger/internal/auth"
 	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"montage-ledger/internal/auth"
 )
 
 type DatabasePinger interface{ Ping(context.Context) error }
@@ -59,6 +59,10 @@ func NewHandler(db DatabasePinger) http.Handler {
 		mux.HandleFunc("GET /app/revisions/{id}", x.requireUser(x.revisionGet))
 		mux.HandleFunc("GET /app/revisions/{id}/ledger", x.requireUser(x.ledgerGet))
 		mux.HandleFunc("POST /app/revisions/{id}/items", x.requireUser(x.itemCreate))
+		mux.HandleFunc("POST /app/revisions/{id}/bulk/preview", x.requireUser(x.bulkPreview))
+		mux.HandleFunc("POST /app/revisions/{id}/bulk/commit", x.requireUser(x.bulkCommit))
+		mux.HandleFunc("GET /app/revisions/{id}/bulk/history", x.requireUser(x.bulkHistoryGet))
+		mux.HandleFunc("POST /app/revisions/{id}/bulk/{operation}/undo", x.requireUser(x.bulkUndo))
 		mux.HandleFunc("POST /app/revisions/{id}/items/{item}", x.requireUser(x.itemUpdate))
 		mux.HandleFunc("POST /app/revisions/{id}/items/{item}/delete", x.requireUser(x.itemDelete))
 		mux.HandleFunc("POST /app/revisions/{id}/systems", x.requireUser(x.systemsPost))
