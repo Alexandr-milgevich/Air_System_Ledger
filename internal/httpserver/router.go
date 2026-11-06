@@ -39,9 +39,7 @@ func NewHandler(db DatabasePinger) http.Handler {
 		sendJSON(w, http.StatusOK, statusResponse{Status: "ready", Service: "montage-ledger"})
 	})
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		_, _ = w.Write([]byte(`<!doctype html><html lang="ru"><meta charset="utf-8"><title>Монтажные ведомости</title><body><h1>Монтажные ведомости ОВиК</h1><p>Базовый сервер. Каталоги и редактор ведомостей пока не реализованы.</p></body></html>`))
+		http.Redirect(w, r, "/app", http.StatusSeeOther)
 	})
 	if pool, ok := db.(*pgxpool.Pool); ok && pool != nil {
 		x := web{db: pool, auth: auth.Store{DB: pool}}
@@ -73,6 +71,9 @@ func NewHandler(db DatabasePinger) http.Handler {
 		mux.HandleFunc("POST /app/revisions/{id}/execution/{event}/approve", x.requireUser(x.executionApprove))
 		mux.HandleFunc("POST /app/revisions/{id}/execution/{assignment}/record", x.requireUser(x.executionRecord))
 		mux.HandleFunc("GET /app/revisions/{id}/execution/export", x.requireUser(x.executionExport))
+		mux.HandleFunc("GET /app/revisions/{id}/reports", x.requireUser(x.reportGet))
+		mux.HandleFunc("GET /app/revisions/{id}/reports/export", x.requireUser(x.reportExport))
+		mux.HandleFunc("POST /app/revisions/{id}/reports/payments", x.requireUser(x.paymentPost))
 		mux.HandleFunc("GET /app/workers", x.requireUser(x.workersGet))
 		mux.HandleFunc("POST /app/workers", x.requireUser(x.workersPost))
 	}
