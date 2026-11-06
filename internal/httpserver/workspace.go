@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"html/template"
+	"montage-ledger/internal/auth"
 	"net/http"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"montage-ledger/internal/auth"
 )
 
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
@@ -23,24 +23,25 @@ type revisionRow struct {
 	Status string
 }
 type workspaceData struct {
-	Title, Error, CSRF, View, ProjectID, ProjectName, CustomerName, RevisionID, RevisionStatus string
-	Admin, CanWrite                                                                            bool
-	Customers, Projects, Workers, ProjectWorkers, Members, Systems, Locations                  []namedRow
-	Revisions                                                                                  []revisionRow
+	Title, Error, CSRF, View, ProjectID, ProjectName, CustomerName, RevisionID, RevisionStatus, Search string
+	Admin, CanWrite, CanClone                                                                          bool
+	Customers, Projects, Workers, ProjectWorkers, Members, Systems, Locations                          []namedRow
+	Revisions, CompareRevisions                                                                        []revisionRow
 }
 
 const workspaceHTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{.Title}} — Монтажные ведомости</title><style>
-body{font:16px/1.5 system-ui,sans-serif;background:#f4f6fa;color:#182236;margin:0}header{background:#182743;color:#fff;padding:18px 5%}header a{color:#fff;margin-right:16px}main{max-width:1080px;margin:28px auto;padding:0 18px}.panel{background:white;padding:24px;border-radius:12px;border:1px solid #dce3eb;margin-bottom:18px}h1{margin:0 0 20px}h2{margin:0 0 12px;font-size:21px}a{color:#245ab0}label{display:block;margin:10px 0 4px;font-weight:600}input,select{box-sizing:border-box;padding:10px;width:100%;max-width:520px;border:1px solid #bcc8d7;border-radius:6px}button{display:block;background:#245ab0;color:white;border:0;padding:11px 19px;margin-top:14px;border-radius:6px;cursor:pointer}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #e3e8f0;text-align:left}.error{color:#a22323}.muted{color:#687488}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.grid .panel{margin-bottom:0}small{color:#69748a}</style></head><body><header><b>Монтажные ведомости ОВиК</b><nav><a href="/app">Главная</a><a href="/app/customers">Заказчики</a><a href="/app/projects">Объекты</a><a href="/app/workers">Работники</a></nav></header><main><h1>{{.Title}}</h1>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+body{font:16px/1.5 system-ui,sans-serif;background:#f4f6fa;color:#182236;margin:0}header{background:#182743;color:#fff;padding:18px 5%}header a{color:#fff;margin-right:16px}main{max-width:1080px;margin:28px auto;padding:0 18px}.panel{background:white;padding:24px;border-radius:12px;border:1px solid #dce3eb;margin-bottom:18px}h1{margin:0 0 20px}h2{margin:0 0 12px;font-size:21px}a{color:#245ab0}label{display:block;margin:10px 0 4px;font-weight:600}input,select{box-sizing:border-box;padding:10px;width:100%;max-width:520px;border:1px solid #bcc8d7;border-radius:6px}button{display:block;background:#245ab0;color:white;border:0;padding:11px 19px;margin-top:14px;border-radius:6px;cursor:pointer}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #e3e8f0;text-align:left}.error{color:#a22323}.muted{color:#687488}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.grid .panel{margin-bottom:0}small{color:#69748a}</style><link rel="stylesheet" href="/assets/app.css"></head><body><header><b>Монтажные ведомости ОВиК</b><nav><a href="/app">Главная</a><a href="/app/customers">Заказчики</a><a href="/app/projects">Объекты</a><a href="/app/workers">Работники</a></nav></header><main><h1>{{.Title}}</h1>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
 {{if eq .View "projects"}}
-<div class="panel"><h2>Объекты</h2><table><tr><th>Объект</th><th>Заказчик</th></tr>{{range .Projects}}<tr><td><a href="/app/projects/{{.ID}}">{{.Name}}</a></td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Объектов пока нет</td></tr>{{end}}</table></div>
+<div class="panel"><h2>Объекты</h2><form method="get" action="/app/projects" class="search-form" role="search"><label for="project-search">Поиск объекта или заказчика</label><div class="search-controls"><input id="project-search" type="search" name="q" value="{{.Search}}" placeholder="Название объекта или заказчика" maxlength="120"><button type="submit">Найти</button><a href="/app/projects">Сбросить</a></div></form><div class="table-scroll"><table><tr><th>Объект</th><th>Заказчик</th></tr>{{range .Projects}}<tr><td><a href="/app/projects/{{.ID}}">{{.Name}}</a></td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Объекты не найдены</td></tr>{{end}}</table></div></div>
 {{if .Admin}}<div class="panel"><h2>Новый объект</h2><form method="post" action="/app/projects"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Заказчик</label><select name="customer_id" required><option value="">Выберите заказчика</option>{{range .Customers}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select><label>Название объекта</label><input name="name" maxlength="250" required><label>Адрес</label><input name="address" maxlength="500"><button>Создать объект</button></form></div>{{end}}
 {{else if eq .View "project"}}
 <p class="muted">Заказчик: {{.CustomerName}}</p><div class="panel"><h2>Ревизии монтажных ведомостей</h2><table><tr><th>Номер</th><th>Статус</th></tr>{{range .Revisions}}<tr><td><a href="/app/revisions/{{.ID}}">Ревизия №{{.Number}}</a></td><td>{{.Status}}</td></tr>{{else}}<tr><td colspan="2">Ревизий нет</td></tr>{{end}}</table>{{if .CanWrite}}<form method="post" action="/app/projects/{{.ProjectID}}/revisions"><input type="hidden" name="csrf" value="{{.CSRF}}"><button>Создать новую пустую ревизию</button></form>{{end}}</div>
 <div class="grid"><div class="panel"><h2>Участники объекта</h2>{{range .Members}}<p>{{.Name}} — {{.Detail}}</p>{{else}}<p>Нет назначений</p>{{end}}{{if .Admin}}<form method="post" action="/app/projects/{{.ProjectID}}/members"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Логин пользователя</label><input name="login" required maxlength="120"><label>Уровень доступа</label><select name="permission"><option value="read">Просмотр</option><option value="write">Редактирование</option><option value="approve">Согласование</option><option value="admin">Администратор объекта</option></select><button>Добавить / изменить доступ</button></form>{{end}}</div>
 <div class="panel"><h2>Монтажники объекта</h2>{{range .ProjectWorkers}}<p>{{.Name}}</p>{{else}}<p>Монтажники не закреплены</p>{{end}}{{if .CanWrite}}<form method="post" action="/app/projects/{{.ProjectID}}/workers"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Монтажник</label><select name="worker_id" required><option value="">Выберите работника</option>{{range .Workers}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select><button>Закрепить за объектом</button></form>{{end}}</div></div>
 {{else if eq .View "revision"}}
+<p><a href="/app/revisions/{{.RevisionID}}/review"><strong>Согласование ведомости</strong></a></p>
 <p><a href="/app/revisions/{{.RevisionID}}/ledger">Открыть редактор монтажной ведомости →</a> · <a href="/app/revisions/{{.RevisionID}}/execution">Факт и начисления</a> · <a href="/app/revisions/{{.RevisionID}}/reports">Сводный отчёт</a></p>
-<p class="muted">Объект: <a href="/app/projects/{{.ProjectID}}">{{.ProjectName}}</a> · Статус: {{.RevisionStatus}}</p><div class="grid"><div class="panel"><h2>Инженерные системы</h2><table><tr><th>Код</th><th>Название</th></tr>{{range .Systems}}<tr><td>{{.Name}}</td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Систем пока нет</td></tr>{{end}}</table>{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/systems" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Код (например, П-31)</label><input name="code" maxlength="50" required><label>Название</label><input name="name" maxlength="250" required><label>Тип системы</label><select name="type_code"><option value="supply">Приточная</option><option value="exhaust">Вытяжная</option><option value="supply_exhaust">Приточно-вытяжная</option><option value="conditioning">Кондиционирование</option><option value="cooling">Холодоснабжение</option><option value="drainage">Дренаж</option></select><button>Добавить систему</button></form>{{end}}</div><div class="panel"><h2>Места монтажа</h2>{{range .Locations}}<p>{{.Name}}</p>{{else}}<p>Помещения пока не внесены</p>{{end}}{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/locations" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Помещение / зона</label><input name="name" maxlength="250" required><button>Добавить место монтажа</button></form>{{end}}</div></div>
+<p class="muted">Объект: <a href="/app/projects/{{.ProjectID}}">{{.ProjectName}}</a> · Статус: {{.RevisionStatus}}</p><div class="panel"><h2>История ревизий</h2><p><a href="/app/revisions/{{.RevisionID}}/history">Журнал изменений отдельных строк</a></p>{{if .CanClone}}<form method="post" action="/app/revisions/{{.RevisionID}}/clone"><input type="hidden" name="csrf" value="{{.CSRF}}"><button type="submit">Создать новую ревизию копированием этой</button></form>{{end}}<p>Сравнить текущую версию с:</p>{{range .CompareRevisions}}<p><a href="/app/revisions/{{$.RevisionID}}/compare?against={{.ID}}">Ревизия №{{.Number}} ({{.Status}})</a></p>{{else}}<p class="muted">Пока нет другой ревизии</p>{{end}}</div><div class="grid"><div class="panel"><h2>Инженерные системы</h2><table><tr><th>Код</th><th>Название</th></tr>{{range .Systems}}<tr><td>{{.Name}}</td><td>{{.Detail}}</td></tr>{{else}}<tr><td colspan="2">Систем пока нет</td></tr>{{end}}</table>{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/systems" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Код (например, П-31)</label><input name="code" maxlength="50" required><label>Название</label><input name="name" maxlength="250" required><label>Тип системы</label><select name="type_code"><option value="supply">Приточная</option><option value="exhaust">Вытяжная</option><option value="supply_exhaust">Приточно-вытяжная</option><option value="conditioning">Кондиционирование</option><option value="cooling">Холодоснабжение</option><option value="drainage">Дренаж</option></select><button>Добавить систему</button></form>{{end}}</div><div class="panel"><h2>Места монтажа</h2>{{range .Locations}}<p>{{.Name}}</p>{{else}}<p>Помещения пока не внесены</p>{{end}}{{if .CanWrite}}<form action="/app/revisions/{{.RevisionID}}/locations" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>Помещение / зона</label><input name="name" maxlength="250" required><button>Добавить место монтажа</button></form>{{end}}</div></div>
 {{else if eq .View "workers"}}
 <div class="panel"><h2>Справочник монтажников</h2>{{range .Workers}}<p>{{.Name}}</p>{{else}}<p>Работников пока нет</p>{{end}}</div>{{if .Admin}}<div class="panel"><h2>Новый монтажник</h2><form method="post" action="/app/workers"><input type="hidden" name="csrf" value="{{.CSRF}}"><label>ФИО или отображаемое имя</label><input name="name" maxlength="250" required><button>Добавить работника</button></form></div>{{end}}
 {{end}}</main></body></html>`
@@ -51,7 +52,7 @@ func workspaceRender(w http.ResponseWriter, status int, data workspaceData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self' 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'")
 	w.WriteHeader(status)
 	_ = workspaceTemplate.Execute(w, data)
 }
@@ -87,7 +88,12 @@ func (x web) projectsGet(w http.ResponseWriter, r *http.Request, u auth.Identity
 	ctx, cancel := shortContext(r)
 	defer cancel()
 	data := workspaceData{Title: "Объекты", View: "projects", Admin: auth.HasRole(u, "admin"), CSRF: x.csrf(r, u)}
-	rows, e := x.db.Query(ctx, `SELECT p.id,p.name,c.name FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.archived_at IS NULL AND ($2::boolean OR EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id=p.id AND pm.user_id=$1)) ORDER BY p.name LIMIT 250`, u.ID, data.Admin)
+	data.Search = strings.TrimSpace(r.URL.Query().Get("q"))
+	if len([]rune(data.Search)) > 120 {
+		http.Error(w, "Слишком длинный поисковый запрос", http.StatusBadRequest)
+		return
+	}
+	rows, e := x.db.Query(ctx, `SELECT p.id,p.name,c.name FROM projects p JOIN customers c ON c.id=p.customer_id WHERE p.archived_at IS NULL AND ($2::boolean OR EXISTS(SELECT 1 FROM project_members pm WHERE pm.project_id=p.id AND pm.user_id=$1)) AND ($3::text = '' OR p.name ILIKE '%' || $3 || '%' OR c.name ILIKE '%' || $3 || '%') ORDER BY p.name LIMIT 250`, u.ID, data.Admin, data.Search)
 	if e != nil {
 		http.Error(w, "Не удалось загрузить объекты", 500)
 		return
@@ -350,7 +356,7 @@ func (x web) revisionGet(w http.ResponseWriter, r *http.Request, u auth.Identity
 		http.Error(w, "Доступ запрещён", 403)
 		return
 	}
-	data := workspaceData{Title: "Ревизия монтажной ведомости", View: "revision", ProjectID: projectID, ProjectName: projectName, RevisionID: id, RevisionStatus: status, CanWrite: canEdit(permission) && status == "draft", CSRF: x.csrf(r, u)}
+	data := workspaceData{Title: "Ревизия монтажной ведомости", View: "revision", ProjectID: projectID, ProjectName: projectName, RevisionID: id, RevisionStatus: status, CanWrite: canEdit(permission) && status == "draft", CanClone: canEdit(permission), CSRF: x.csrf(r, u)}
 	rows, e := x.db.Query(ctx, `SELECT id,code,name FROM project_systems WHERE revision_id=$1 ORDER BY sort_order,code`, id)
 	if e != nil {
 		http.Error(w, "Ошибка систем", 500)
@@ -389,6 +395,26 @@ func (x web) revisionGet(w http.ResponseWriter, r *http.Request, u auth.Identity
 	rows.Close()
 	if e != nil {
 		http.Error(w, "Ошибка чтения мест", 500)
+		return
+	}
+	rs, e := x.db.Query(ctx, `SELECT id::text,number,status FROM project_revisions WHERE project_id=$1 AND id<>$2 ORDER BY number DESC`, projectID, id)
+	if e != nil {
+		http.Error(w, "Ошибка списка ревизий", 500)
+		return
+	}
+	for rs.Next() {
+		var v revisionRow
+		if e = rs.Scan(&v.ID, &v.Number, &v.Status); e != nil {
+			break
+		}
+		data.CompareRevisions = append(data.CompareRevisions, v)
+	}
+	if e == nil {
+		e = rs.Err()
+	}
+	rs.Close()
+	if e != nil {
+		http.Error(w, "Ошибка списка ревизий", 500)
 		return
 	}
 	workspaceRender(w, 200, data)

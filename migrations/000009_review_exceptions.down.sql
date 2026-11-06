@@ -1,0 +1,11 @@
+DROP TRIGGER IF EXISTS review_exception_return ON project_revisions;
+DROP FUNCTION IF EXISTS review_exception_return_invalidation();
+DROP TRIGGER IF EXISTS project_work_items_exception_invalidation ON project_work_items;
+DROP FUNCTION IF EXISTS invalidate_review_amount_exception();
+DROP TRIGGER IF EXISTS review_amount_exception_audit ON review_amount_exceptions;
+DROP FUNCTION IF EXISTS audit_review_amount_exception();
+DROP TRIGGER IF EXISTS review_amount_exception_events_immutable ON review_amount_exception_events;
+DROP FUNCTION IF EXISTS review_exception_events_guard();
+DROP TABLE IF EXISTS review_amount_exception_events;
+DROP TABLE IF EXISTS review_amount_exceptions;
+DROP FUNCTION IF EXISTS review_item_snapshot(project_work_items);

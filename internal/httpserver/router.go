@@ -3,11 +3,11 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"montage-ledger/internal/auth"
 	"net/http"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"montage-ledger/internal/auth"
 )
 
 type DatabasePinger interface{ Ping(context.Context) error }
@@ -21,6 +21,7 @@ type statusResponse struct {
 // A nil pinger is treated as unavailable, never as healthy.
 func NewHandler(db DatabasePinger) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /assets/app.css", appCSSHandler)
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		sendJSON(w, http.StatusOK, statusResponse{Status: "alive", Service: "montage-ledger"})
 	})
@@ -56,8 +57,21 @@ func NewHandler(db DatabasePinger) http.Handler {
 		mux.HandleFunc("POST /app/projects/{id}/members", x.requireUser(x.membersPost))
 		mux.HandleFunc("POST /app/projects/{id}/workers", x.requireUser(x.projectWorkersPost))
 		mux.HandleFunc("GET /app/revisions/{id}", x.requireUser(x.revisionGet))
+		mux.HandleFunc("GET /app/revisions/{id}/review", x.requireUser(x.reviewGet))
+		mux.HandleFunc("POST /app/revisions/{id}/review/submit", x.requireUser(x.reviewSubmit))
+		mux.HandleFunc("POST /app/revisions/{id}/review/decide", x.requireUser(x.reviewDecide))
+		mux.HandleFunc("POST /app/revisions/{id}/review/exception/request", x.requireUser(x.reviewExceptionRequest))
+		mux.HandleFunc("POST /app/revisions/{id}/review/exception/accept", x.requireUser(x.reviewExceptionAccept))
+		mux.HandleFunc("GET /app/revisions/{id}/review/approved.xlsx", x.requireUser(x.approvedXLSX))
 		mux.HandleFunc("GET /app/revisions/{id}/ledger", x.requireUser(x.ledgerGet))
+		mux.HandleFunc("POST /app/revisions/{id}/clone", x.requireUser(x.revisionClone))
+		mux.HandleFunc("GET /app/revisions/{id}/compare", x.requireUser(x.revisionCompare))
+		mux.HandleFunc("GET /app/revisions/{id}/history", x.requireUser(x.revisionHistory))
 		mux.HandleFunc("POST /app/revisions/{id}/items", x.requireUser(x.itemCreate))
+		mux.HandleFunc("POST /app/revisions/{id}/bulk/preview", x.requireUser(x.bulkPreview))
+		mux.HandleFunc("POST /app/revisions/{id}/bulk/commit", x.requireUser(x.bulkCommit))
+		mux.HandleFunc("GET /app/revisions/{id}/bulk/history", x.requireUser(x.bulkHistoryGet))
+		mux.HandleFunc("POST /app/revisions/{id}/bulk/{operation}/undo", x.requireUser(x.bulkUndo))
 		mux.HandleFunc("POST /app/revisions/{id}/items/{item}", x.requireUser(x.itemUpdate))
 		mux.HandleFunc("POST /app/revisions/{id}/items/{item}/delete", x.requireUser(x.itemDelete))
 		mux.HandleFunc("POST /app/revisions/{id}/systems", x.requireUser(x.systemsPost))
@@ -74,6 +88,12 @@ func NewHandler(db DatabasePinger) http.Handler {
 		mux.HandleFunc("GET /app/revisions/{id}/reports", x.requireUser(x.reportGet))
 		mux.HandleFunc("GET /app/revisions/{id}/reports/export", x.requireUser(x.reportExport))
 		mux.HandleFunc("POST /app/revisions/{id}/reports/payments", x.requireUser(x.paymentPost))
+		mux.HandleFunc("GET /app/admin/users", x.requireUser(x.adminUsersGet))
+		mux.HandleFunc("POST /app/admin/users", x.requireUser(x.adminUsersCreate))
+		mux.HandleFunc("POST /app/admin/users/{id}/update", x.requireUser(x.adminUsersUpdate))
+		mux.HandleFunc("POST /app/admin/users/{id}/password", x.requireUser(x.adminUsersPassword))
+		mux.HandleFunc("POST /app/admin/users/{id}/status", x.requireUser(x.adminUsersStatus))
+		mux.HandleFunc("POST /app/admin/access", x.requireUser(x.adminProjectAccess))
 		mux.HandleFunc("GET /app/workers", x.requireUser(x.workersGet))
 		mux.HandleFunc("POST /app/workers", x.requireUser(x.workersPost))
 	}
