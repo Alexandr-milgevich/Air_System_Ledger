@@ -19,6 +19,8 @@ type ledgerSystem struct {
 }
 type ledgerItem struct{ ID, Name, Quantity, InputUnit, Mode, Coefficient, Calculated, ResultUnit, UnitPrice, Amount, Location, LocationID, WidthMM, HeightMM, DiameterMM, SourceID, IncludeCSV, ExcludeCSV string }
 type ledgerView struct {
+	Catalog []catalogRow
+
 	RevisionID, ProjectID, ProjectName, Status, CSRF, Error, Total string
 	CanWrite                                                       bool
 	FilterSystem, FilterQuery                                      string
@@ -30,6 +32,7 @@ type ledgerView struct {
 
 const ledgerHTML = `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Редактор ведомости</title><style>
 body{margin:0;background:#f4f6fa;color:#19263a;font:15px/1.5 system-ui,sans-serif}header{background:#182743;color:white;padding:17px 4%}header a{color:white}main{max-width:1420px;margin:25px auto;padding:0 18px}.panel{background:white;border:1px solid #dce3eb;border-radius:11px;padding:20px;margin-bottom:18px}h1{font-size:26px}h2{font-size:21px}h3{font-size:18px}a{color:#245ab0}label{display:block;font-weight:600;margin:7px 0 3px}input,select{box-sizing:border-box;padding:8px;border:1px solid #bcc8d7;border-radius:5px;max-width:100%;width:100%}button{background:#245ab0;color:white;border:0;border-radius:5px;padding:9px 13px;cursor:pointer}.danger{background:#a23a3a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e1e6ee;text-align:left;padding:9px}th{background:#f1f4f9}td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.scroll{overflow-x:auto}.muted{color:#66758a}.error{color:#9c1e1e}.total{font-size:21px;font-weight:700}.small{font-size:12px}.inline{display:inline}.inline button{padding:5px 9px}.editform{margin-top:7px;border-top:1px dashed #dde4ec;padding-top:10px}details{margin-top:8px}summary{cursor:pointer;color:#245ab0}.nowrap{white-space:nowrap}</style><link rel="stylesheet" href="/assets/app.css"></head><body><header><b>Монтажные ведомости ОВиК</b> · <a href="/app/revisions/{{.RevisionID}}">К ревизии</a> · <a href="/app/revisions/{{.RevisionID}}/execution">Факт и начисления</a> · <a href="/app/revisions/{{.RevisionID}}/reports">Сводный отчёт</a> · <a href="/app/revisions/{{.RevisionID}}/xlsx">Импорт XLSX</a> · <a href="/app/revisions/{{.RevisionID}}/xlsx/export">Экспорт XLSX</a> · <a href="/app/projects/{{.ProjectID}}">К объекту</a></header><main><h1>Редактор монтажной ведомости</h1><p class="muted">{{.ProjectName}} · {{.Status}} · {{if .CanWrite}}Редактирование доступно{{else}}Только просмотр{{end}}</p>{{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+{{if .CanWrite}}<section class="panel"><h2>Добавить из справочника</h2><p><a href="/app/catalog">Открыть справочник и расценки</a>. Позиция добавится с актуальными на момент создания ценой и коэффициентом.</p><form method="post" action="/app/revisions/{{.RevisionID}}/items"><input type="hidden" name="csrf" value="{{.CSRF}}"><div class="grid"><div><label>Позиция справочника</label><select name="catalog_id" required>{{range .Catalog}}<option value="{{.ID}}">{{.Category}} · {{.Name}} · {{.Price}} ₽</option>{{end}}</select></div><div><label>Система</label><select name="system_id" required>{{range .Systems}}<option value="{{.ID}}">{{.Code}} · {{.Name}}</option>{{end}}</select></div><div><label>Количество</label><input name="quantity" required value="1" inputmode="decimal"></div><div><label>Место монтажа</label><select name="location_id"><option value="">Не указано</option>{{range .Locations}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div></div><button {{if not .Catalog}}disabled{{end}}>Добавить из справочника</button></form>{{if not .Catalog}}<p class="muted">Активных позиций пока нет. Администратор может создать их в справочнике.</p>{{end}}</section>{{end}}
 {{if .CanWrite}}<section class="panel"><h2>Добавить монтажную работу</h2><form action="/app/revisions/{{.RevisionID}}/items" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><div class="grid"><div><label>Система</label><select name="system_id" required>{{range .Systems}}<option value="{{.ID}}">{{.Code}} · {{.Name}}</option>{{end}}</select></div><div><label>Название работы</label><input name="name" required maxlength="250" placeholder="Воздуховод 400×200"></div><div><label>Исходное количество</label><input name="quantity" required value="1" inputmode="decimal"></div><div><label>Единица</label><select name="unit"><option value="m">пог. м</option><option value="pcs">шт.</option><option value="m2">м²</option></select></div><div><label>Расчёт</label><select name="mode"><option value="coefficient">Количество × коэффициент (м²)</option><option value="direct">Напрямую (шт., м, м²)</option><option value="geometry_rectangular">Прямоугольный воздуховод (м²)</option><option value="geometry_round">Круглый воздуховод (м²)</option><option value="reference_coefficient">Справочный коэффициент (м²/шт.)</option><option value="sum_items">Изоляция: одна строка × коэффициент</option><option value="sum_multi">Изоляция: сумма площадей минус исключения × коэффициент</option></select></div><div><label>Ширина A (мм)</label><input name="width_mm" placeholder="400"></div><div><label>Высота B (мм)</label><input name="height_mm" placeholder="200"></div><div><label>Диаметр D (мм)</label><input name="diameter_mm" placeholder="200"></div><div><label>Источник для изоляции</label><select name="source_item_id"><option value="">Не выбран</option>{{range .AllItems}}<option value="{{.ID}}">{{.Name}} ({{.Calculated}} {{.ResultUnit}})</option>{{end}}</select></div><div><label>Сложить площади (Ctrl/Shift для выбора нескольких)</label><select name="include_ids" multiple size="5">{{range .AllItems}}<option value="{{.ID}}">{{.Name}} ({{.Calculated}} {{.ResultUnit}})</option>{{end}}</select></div><div><label>Вычесть площади</label><select name="exclude_ids" multiple size="5">{{range .AllItems}}<option value="{{.ID}}">{{.Name}} ({{.Calculated}} {{.ResultUnit}})</option>{{end}}</select></div><div><label>Коэффициент (м²/ед.)</label><input name="coefficient" value="1" inputmode="decimal"></div><div><label>Цена за расчётную единицу, ₽</label><input name="price" value="0" required inputmode="decimal"></div><div><label>Место монтажа</label><select name="location_id"><option value="">Не указано</option>{{range .Locations}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div></div><button>Добавить позицию</button></form><p class="muted small">Для геометрии выберите единицу «пог. м» и заполните размеры в мм. Для изоляции выберите строку-источник (м²), укажите коэффициент и цену. В режиме «Напрямую» цена относится к исходной единице. В режиме «Количество × коэффициент» результат тарифицируется в м². Поля коэффициента и цены допускают десятичную запятую.</p></section>{{end}}
 <section class="panel"><h2>Фильтрация работ</h2><form class="ledger-filters" action="/app/revisions/{{.RevisionID}}/ledger" method="get"><label>Система<select name="system"><option value="">Все системы</option>{{range .Systems}}<option value="{{.ID}}" {{if eq $.FilterSystem .ID}}selected{{end}}>{{.Code}} · {{.Name}}</option>{{end}}</select></label><label>Поиск по работе или месту монтажа<input type="search" name="q" maxlength="120" value="{{.FilterQuery}}" placeholder="Например, воздуховод"></label><button type="submit">Применить</button><a href="/app/revisions/{{.RevisionID}}/ledger">Сбросить</a></form><p class="muted">Показано {{.VisibleCount}} из {{.TotalCount}} строк. Итоги систем и ведомости не зависят от фильтров.</p></section>
 {{if .CanWrite}}<section class="panel"><h2>Массовое редактирование</h2><p><a href="/app/revisions/{{.RevisionID}}/bulk/history">Журнал массовых изменений и откат</a></p><p class="muted">Выберите строки в таблицах ниже, задайте операцию и проверьте изменения до сохранения (не более 100 строк).</p><form id="bulk-preview" method="post" action="/app/revisions/{{.RevisionID}}/bulk/preview"><input type="hidden" name="csrf" value="{{.CSRF}}"><div class="grid"><div><label>Операция</label><select name="action"><option value="price_percent">Изменить цену на % (например, 10 или -5)</option><option value="price_fixed">Установить цену, ₽</option><option value="location">Назначить место монтажа</option></select></div><div><label>Значение цены или процента</label><input name="value" value="10" inputmode="decimal"></div><div><label>Место монтажа</label><select name="location_id"><option value="">Не указано</option>{{range .Locations}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div></div><button type="submit">Предпросмотр выбранных строк</button></form></section>{{end}}
@@ -104,6 +107,26 @@ func (x web) ledgerGet(w http.ResponseWriter, r *http.Request, u auth.Identity) 
 	rows.Close()
 	if e != nil {
 		http.Error(w, "Ошибка систем", 500)
+		return
+	}
+	catalogRows, catalogErr := x.db.Query(ctx, `SELECT id::text,name,category_code,input_unit_code,rule_type,COALESCE(coefficient::text,''),unit_price::text,COALESCE(width_mm::text,''),COALESCE(height_mm::text,''),COALESCE(diameter_mm::text,''),active FROM work_catalog WHERE active=true AND rule_type IN ('direct','coefficient','reference_coefficient','geometry_rectangular','geometry_round') ORDER BY category_code,name LIMIT 500`)
+	if catalogErr != nil {
+		http.Error(w, "Ошибка справочника", 500)
+		return
+	}
+	for catalogRows.Next() {
+		var v catalogRow
+		if catalogErr = catalogRows.Scan(&v.ID, &v.Name, &v.Category, &v.Unit, &v.Mode, &v.Coefficient, &v.Price, &v.Width, &v.Height, &v.Diameter, &v.Active); catalogErr != nil {
+			break
+		}
+		data.Catalog = append(data.Catalog, v)
+	}
+	if catalogErr == nil {
+		catalogErr = catalogRows.Err()
+	}
+	catalogRows.Close()
+	if catalogErr != nil {
+		http.Error(w, "Ошибка чтения справочника", 500)
 		return
 	}
 	rows, e = x.db.Query(ctx, `SELECT id,name FROM project_locations WHERE revision_id=$1 ORDER BY name`, id)
@@ -207,13 +230,15 @@ func (x web) ledgerGet(w http.ResponseWriter, r *http.Request, u auth.Identity) 
 }
 
 type itemInput struct {
+	CatalogID string
+
 	Name, SystemID, LocationID, Quantity, Unit, Mode, Coefficient, Price, WidthMM, HeightMM, DiameterMM, SourceID string
 	IncludeIDs, ExcludeIDs                                                                                        []string
 }
 
 func parseItemInput(r *http.Request) itemInput {
 	_ = r.ParseForm()
-	return itemInput{IncludeIDs: r.PostForm["include_ids"], ExcludeIDs: r.PostForm["exclude_ids"], Name: strings.TrimSpace(r.PostFormValue("name")), SystemID: r.PostFormValue("system_id"), LocationID: r.PostFormValue("location_id"), Quantity: r.PostFormValue("quantity"), Unit: r.PostFormValue("unit"), Mode: r.PostFormValue("mode"), Coefficient: r.PostFormValue("coefficient"), Price: r.PostFormValue("price"), WidthMM: r.PostFormValue("width_mm"), HeightMM: r.PostFormValue("height_mm"), DiameterMM: r.PostFormValue("diameter_mm"), SourceID: r.PostFormValue("source_item_id")}
+	return itemInput{CatalogID: r.PostFormValue("catalog_id"), IncludeIDs: r.PostForm["include_ids"], ExcludeIDs: r.PostForm["exclude_ids"], Name: strings.TrimSpace(r.PostFormValue("name")), SystemID: r.PostFormValue("system_id"), LocationID: r.PostFormValue("location_id"), Quantity: r.PostFormValue("quantity"), Unit: r.PostFormValue("unit"), Mode: r.PostFormValue("mode"), Coefficient: r.PostFormValue("coefficient"), Price: r.PostFormValue("price"), WidthMM: r.PostFormValue("width_mm"), HeightMM: r.PostFormValue("height_mm"), DiameterMM: r.PostFormValue("diameter_mm"), SourceID: r.PostFormValue("source_item_id")}
 }
 func validateItem(i itemInput) (calculation.Result, string, error) {
 	if strings.TrimSpace(i.Name) == "" || len(i.Name) > 250 {
@@ -310,6 +335,27 @@ func (x web) itemSave(w http.ResponseWriter, r *http.Request, u auth.Identity, u
 		http.Error(w, "Некорректная система", 400)
 		return
 	}
+	// Catalog fields are ALWAYS loaded from PostgreSQL. The browser only supplies catalog_id,
+	// system_id, location_id and quantity. This prevents price/rule tampering.
+	if !update && input.CatalogID != "" {
+		if !uuidPattern.MatchString(input.CatalogID) {
+			http.Error(w, "Неверная позиция каталога", 400)
+			return
+		}
+		ctxCat, cancelCat := shortContext(r)
+		var c catalogRow
+		catErr := x.db.QueryRow(ctxCat, `SELECT name,input_unit_code,rule_type,COALESCE(coefficient::text,''),unit_price::text,COALESCE(width_mm::text,''),COALESCE(height_mm::text,''),COALESCE(diameter_mm::text,'') FROM work_catalog WHERE id=$1 AND active=true AND rule_type IN ('direct','coefficient','reference_coefficient','geometry_rectangular','geometry_round')`, input.CatalogID).Scan(&c.Name, &c.Unit, &c.Mode, &c.Coefficient, &c.Price, &c.Width, &c.Height, &c.Diameter)
+		cancelCat()
+		if catErr != nil {
+			http.Error(w, "Позиция справочника недоступна", 404)
+			return
+		}
+		input.Name, input.Unit, input.Mode, input.Coefficient, input.Price = c.Name, c.Unit, c.Mode, c.Coefficient, c.Price
+		input.WidthMM, input.HeightMM, input.DiameterMM = c.Width, c.Height, c.Diameter
+		input.SourceID = ""
+		input.IncludeIDs = nil
+		input.ExcludeIDs = nil
+	}
 	result, billed, e := validateItem(input)
 	if e != nil {
 		http.Error(w, "Некорректная строка: "+e.Error(), 400)
@@ -405,7 +451,12 @@ func (x web) itemSave(w http.ResponseWriter, r *http.Request, u auth.Identity, u
 			http.Error(w, "Выберите систему", 400)
 			return
 		}
-		tag, execErr := tx.Exec(ctx, `INSERT INTO project_work_items(revision_id,system_id,location_id,name_snapshot,input_quantity,input_unit_code,coefficient,calculated_quantity,result_unit_code,billable_quantity,billable_unit_code,unit_price,amount,rule_snapshot,inputs_snapshot,manually_modified,sort_order) SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$9,$11,$12,jsonb_build_object('mode',$13::text,'rule_version',2),$14::jsonb,true,(SELECT COALESCE(MAX(sort_order),0)+1 FROM project_work_items WHERE revision_id=$1) FROM project_systems s WHERE s.revision_id=$1 AND s.id=$2 AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM project_locations l WHERE l.id=$3 AND l.revision_id=$1))`, id, input.SystemID, location, input.Name, resultInput(input.Quantity), input.Unit, nullableCoefficient(result.Coefficient), result.Calculated, billed, result.Billable, resultInput(input.Price), result.Amount, input.Mode, string(snapshot))
+		tag, execErr := tx.Exec(ctx, `INSERT INTO project_work_items(revision_id,system_id,location_id,name_snapshot,input_quantity,input_unit_code,coefficient,calculated_quantity,result_unit_code,billable_quantity,billable_unit_code,unit_price,amount,rule_snapshot,inputs_snapshot,manually_modified,sort_order,work_catalog_id,source_type) SELECT $1,s.id,$3,$4,$5,$6,$7,$8,$9,$10,$9,$11,$12,jsonb_build_object('mode',$13::text,'rule_version',2),$14::jsonb,($15::uuid IS NULL),(SELECT COALESCE(MAX(sort_order),0)+1 FROM project_work_items WHERE revision_id=$1),$15::uuid,(CASE WHEN $15::uuid IS NULL THEN 'manual' ELSE 'template' END) FROM project_systems s WHERE s.revision_id=$1 AND s.id=$2 AND ($3::uuid IS NULL OR EXISTS(SELECT 1 FROM project_locations l WHERE l.id=$3 AND l.revision_id=$1))`, id, input.SystemID, location, input.Name, resultInput(input.Quantity), input.Unit, nullableCoefficient(result.Coefficient), result.Calculated, billed, result.Billable, resultInput(input.Price), result.Amount, input.Mode, string(snapshot), func() any {
+			if input.CatalogID == "" {
+				return nil
+			}
+			return input.CatalogID
+		}())
 		e = execErr
 		if e == nil {
 			affected = tag.RowsAffected()

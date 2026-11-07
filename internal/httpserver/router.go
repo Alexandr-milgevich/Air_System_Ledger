@@ -99,6 +99,10 @@ func NewHandler(db DatabasePinger) http.Handler {
 		mux.HandleFunc("POST /app/admin/users/{id}/password", x.requireUser(x.adminUsersPassword))
 		mux.HandleFunc("POST /app/admin/users/{id}/status", x.requireUser(x.adminUsersStatus))
 		mux.HandleFunc("POST /app/admin/access", x.requireUser(x.adminProjectAccess))
+		mux.HandleFunc("GET /app/catalog", x.requireUser(x.catalogGet))
+		mux.HandleFunc("POST /app/catalog", x.requireUser(x.catalogCreate))
+		mux.HandleFunc("POST /app/catalog/{id}/status", x.requireUser(x.catalogStatus))
+		mux.HandleFunc("POST /app/catalog/{id}/price", x.requireUser(x.catalogPriceUpdate))
 		mux.HandleFunc("GET /app/workers", x.requireUser(x.workersGet))
 		mux.HandleFunc("POST /app/workers", x.requireUser(x.workersPost))
 	}
